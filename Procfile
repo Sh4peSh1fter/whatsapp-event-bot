@@ -1,1 +1,1 @@
-web gunicorn whatsapp-event-bot:whatsapp-event-bot
+web gunicorn app:app
