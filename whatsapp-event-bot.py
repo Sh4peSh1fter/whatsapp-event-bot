@@ -10,12 +10,18 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from time import sleep
 from webdriver_manager.chrome import ChromeDriverManager
+from difflib import SequenceMatcher
 
 
 # Constants
-MANUAL = ""
+MANUAL = "help / ? - prints this manual.\n" \
+         "bitcoin - get the current value of bitcoin.\n" \
+         "events - get this weeks DevOps and Cloud events.\n" \
+         "meme - get random meme." \
+         "Have Fun!"
 BITCOIN_API = "https://api.coindesk.com/v1/bpi/currentprice.json"
 HEBREW_TO_ENGLISH_MONTHS = {"ינואר": "January", "פברואר": "February", "מרץ": "March", "אפריל": "April", "מאי": "May", "יוני" : "June", "יולי": "July", "אוגוסט": "August", "ספטמבר": "September", "אוקטובר": "October", "נובמבר": "November", "דצמבר": "December"}
+MIN_DIFF_RATIO = 0.75
 
 
 # Globals
@@ -25,11 +31,15 @@ event_sources = {"eventbrite": "https://www.eventbrite.com/d/online/free--events
 schedule = {"Sunday": [], "Monday": [], "Tuesday": [], "Wednesday": [], "Thursday": [], "Friday": [], "Saturday": []}
 
 
+def get_manual():
+    return MANUAL
+
+
 def get_curr_bitcoin_value():
     response = requests.get(BITCOIN_API)
     response_json = response.json()
 
-    return str(response_json['bpi']['USD']['rate']) + "$"
+    return "The current price of Bitcoin in Dollars is {0}$".format(str(response_json['bpi']['USD']['rate']))
 
 
 def next_weekday(curr_date, weekday):
@@ -130,11 +140,11 @@ def get_geektime():
 
 
 def get_event():
-    get_eventbrite()
-    print(schedule)
-    # get_geektime()
-    print(schedule)
     msg = ""
+    count = 0
+
+    get_eventbrite()
+    # get_geektime()
 
     for day in schedule.keys():
         msg = msg + day
@@ -157,35 +167,52 @@ def get_event():
         msg = msg + "\n------------\n"
 
         for event in schedule[day]:
-            msg = msg + "* " + event + "\n"
+            count += 1
+            msg = msg + str(count) + ".    " + event + "\n"
         msg = msg + "\n"
 
     return msg
 
 
+def get_meme():
+    return "Coming Soon"
+
+
 @app.route("/")
-def hello():
-    return "Hello, World!"
+def home():
+    return "The bot is working! try sending WhatsApp messages to /msg."
 
 
 @app.route("/msg", methods=['POST'])
-def sms_reply():
+def reply():
     global schedule
-    # Fetch the message
-    rec_msg = request.form.get('Body')
-    # Create reply
+    send_msg = "?"
+    options = {"help": get_manual,
+               "?": get_manual,
+               "bitcoin": get_curr_bitcoin_value,
+               "events": get_event,
+               "meme": get_meme}
+
+    for key in schedule:
+        schedule[key].clear()
+
+    rec_msg = request.form.get('Body').lower()
     resp = MessagingResponse()
 
-    send_msg = "?"
+    if rec_msg in options:
+        send_msg = options[rec_msg]()
+    else:
+        for op in options:
+            if SequenceMatcher(None, rec_msg, op).ratio() >= MIN_DIFF_RATIO:
+                send_msg = "Did you mean {0}?".format(op)
+                break
 
-    if rec_msg == "help" or rec_msg == "?":
-        send_msg = MANUAL
-    elif rec_msg == "bitcoin":
-        send_msg = get_curr_bitcoin_value()
-    elif rec_msg == "events":
-        send_msg = get_event()
-        for key in schedule:
-            schedule[key].clear()
+    # if rec_msg == "help" or rec_msg == "?":
+    #     send_msg = get_manual()
+    # elif rec_msg == "bitcoin":
+    #     send_msg = get_curr_bitcoin_value()
+    # elif rec_msg == "events":
+    #     send_msg = get_event()
 
     resp.message(send_msg)
 
